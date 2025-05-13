@@ -1,6 +1,7 @@
 <?php
 class user {
     private $conn;
+    private $business_id;
     private $table_users = "users"; 
     private $table_products = "products";   // Assuming you have a products table       
     private $table_categories = "categories"; // Assuming you have a categories table   
@@ -11,6 +12,7 @@ class user {
     
     public function __construct($db) {
         $this->conn = $db;
+         $this->business_id = isset($_SESSION['business_id']) ? $_SESSION['business_id'] : null;
     }
 
     //register function
@@ -57,7 +59,10 @@ class user {
         }
     
         // If no validation errors, proceed with inserting the data
-        $query = "INSERT INTO " . $this->table_users . " (name, password, email, business_name) VALUES (:name, :password, :email, :business_name)";
+       $query = "INSERT INTO " . $this->table_users . " 
+              (name, password, email, business_name, business_id) 
+              VALUES 
+              (:name, :password, :email, :business_name, :business_id)";
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':name', $name);
     
@@ -66,7 +71,19 @@ class user {
         $stmt->bindParam(':password', $passwordHash);
         $stmt->bindParam(':email', $email);
         $stmt->bindParam(':business_name', $bussname);
-    
+        if ($stmt->execute()) {
+        $business_id = $this->conn->lastInsertId();
+        // Update the user's business_id
+        $updateQuery = "UPDATE " . $this->table_users . " 
+                       SET business_id = :business_id 
+                       WHERE id = :id";
+        $updateStmt = $this->conn->prepare($updateQuery);
+        $updateStmt->bindParam(':business_id', $business_id);
+        $updateStmt->bindParam(':id', $business_id);
+        $updateStmt->execute();
+        
+        return true;
+    }
         // Check if email already exists
         $checkEmailQuery = "SELECT id FROM " . $this->table_users . " WHERE email = :email LIMIT 1";
         $checkEmailStmt = $this->conn->prepare($checkEmailQuery);
@@ -95,45 +112,38 @@ class user {
     }
     
    //login function
-   public function login($email, $password) {
-    try {
-        // Select additional fields including business_name
-        $query = "SELECT id, name, password, email, business_name FROM " . $this->table_users . " WHERE email = :email LIMIT 1";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':email', $email);
-        $stmt->execute();
-        
-        if ($stmt->rowCount() > 0) {
-            $row = $stmt->fetch(PDO::FETCH_ASSOC);
+public function login($email, $password) {
+    $query = "SELECT id, email, password, business_id, name, business_name 
+              FROM " . $this->table_users . " 
+              WHERE email = :email";
+    
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':email', $email);
+    $stmt->execute();
+    
+    if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        if (password_verify($password, $row['password'])) {
+            $_SESSION['user_id'] = $row['id'];
+            $_SESSION['email'] = $row['email'];
+            $_SESSION['business_id'] = $row['id']; // Set business_id same as user_id for isolation
+            $_SESSION['name'] = $row['name'];
+            $_SESSION['business_name'] = $row['business_name'];
             
-            // Debug line - remove in production
-            error_log("Stored hash: " . $row['password']);
-            error_log("Provided password: " . $password);
-            
-            if (password_verify($password, $row['password'])) {
-                // Store all necessary session variables
-                $_SESSION['logged_in'] = true;
-                $_SESSION['user_id'] = $row['id'];
-                $_SESSION['email'] = $row['email'];
-                $_SESSION['name'] = $row['name'];
-                $_SESSION['business_name'] = $row['business_name'];
-                
-                return [
-                    'success' => true, 
-                    'message' => 'Login successful',
-                    'user_id' => $row['id'],
-                    'user_name' => $row['name'],
-                    'business_name' => $row['business_name']
-                ];
-            }
-            // More specific error message
-            return ['success' => false, 'message' => 'Invalid email or password'];
+            return [
+                'success' => true,
+                'user_id' => $row['id'],
+                'user_email' => $row['email'],
+                'user_name' => $row['name'],
+                'business_id' => $row['id'], // Use user_id as business_id
+                'business_name' => $row['business_name'],
+                'message' => 'Login successful'
+            ];
         }
-        return ['success' => false, 'message' => 'Invalid email or password'];
-    } catch (PDOException $e) {
-        error_log("Login error: " . $e->getMessage());
-        return ['success' => false, 'message' => 'Database error occurred'];
     }
+    return [
+        'success' => false,
+        'message' => 'Invalid email or password'
+    ];
 }
     
     //check if user is logged in
@@ -149,76 +159,88 @@ class user {
     }
      //members function
      public function members() {
-        $query = "SELECT 
-                    id, 
-                    SUBSTRING_INDEX(name, ' ', 1) AS first_name, 
-                    SUBSTRING_INDEX(name, ' ', -1) AS last_name,
-                    CONCAT('EMP', LPAD(id, 2, '0')) AS employee_id 
-                  FROM " . $this->table_users;
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute();
-        return $stmt;
-    }
+    $query = "SELECT 
+                id, 
+                SUBSTRING_INDEX(name, ' ', 1) AS first_name, 
+                SUBSTRING_INDEX(name, ' ', -1) AS last_name,
+                CONCAT('EMP', LPAD(id, 2, '0')) AS employee_id
+              FROM " . $this->table_users . "
+              WHERE business_id = :business_id";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':business_id', $this->business_id);
+    $stmt->execute();
+    return $stmt;
+}
     //edit function
-    public function edit($id, $name) {
-        $query = "UPDATE " . $this->table_users . " SET name = :name WHERE id = :id";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':id', $id);
-        return $stmt->execute();
-    }  
+   public function edit($id, $name) {
+    $query = "UPDATE " . $this->table_users . " 
+              SET name = :name 
+              WHERE id = :id AND business_id = :business_id";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':name', $name);
+    $stmt->bindParam(':id', $id);
+    $stmt->bindParam(':business_id', $this->business_id);
+    return $stmt->execute();
+} 
     //edit category function
     public function editCategory($id, $name) {
-        $query = "UPDATE " . $this->table_categories . " SET name = :name WHERE id = :id";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':id', $id);
-        return $stmt->execute();
-    }
+    $query = "UPDATE " . $this->table_categories . " 
+              SET name = :name 
+              WHERE id = :id AND business_id = :business_id";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':name', $name);
+    $stmt->bindParam(':id', $id);
+    $stmt->bindParam(':business_id', $this->business_id);
+    return $stmt->execute();
+}
     //editSale function
-    public function editSale($id, $product_id, $price, $quantity, $date) {
-        $query = "UPDATE " . $this->table_sales . " SET product_id = :product_id, price = :price, quantity = :quantity, date = :date WHERE id = :id";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':product_id', $product_id);
-        $stmt->bindParam(':price', $price);
-        $stmt->bindParam(':quantity', $quantity);
-        $stmt->bindParam(':date', $date);
-        $stmt->bindParam(':id', $id);
-        return $stmt->execute();
-    }
+  public function editSale($id, $product_id, $price, $quantity, $date) {
+    $query = "UPDATE " . $this->table_sales . " 
+              SET product_id = :product_id, price = :price, quantity = :quantity, date = :date 
+              WHERE id = :id AND business_id = :business_id";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':product_id', $product_id);
+    $stmt->bindParam(':price', $price);
+    $stmt->bindParam(':quantity', $quantity);
+    $stmt->bindParam(':date', $date);
+    $stmt->bindParam(':id', $id);
+    $stmt->bindParam(':business_id', $this->business_id);
+    return $stmt->execute();
+}
     //edit product function
-    public function editProduct($id, $name, $buy_price, $sell_price, $quantity, $stock, $category_id) {
-        $query = "UPDATE " . $this->table_products . " 
-                  SET name = :name, 
-                      buy_price = :buy_price, 
-                      sell_price = :sell_price, 
-                      quantity = :quantity, 
-                      stock = :stock, 
-                      category_id = :category_id 
-                  WHERE id = :id";
-        
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':id', $id);
-        $stmt->bindParam(':name', $name);
-        $stmt->bindParam(':buy_price', $buy_price);
-        $stmt->bindParam(':sell_price', $sell_price);
-        $stmt->bindParam(':quantity', $quantity);
-        $stmt->bindParam(':stock', $stock);
-        $stmt->bindParam(':category_id', $category_id);
-        
-        return $stmt->execute();
-    }
+   public function editProduct($id, $name, $buy_price, $sell_price, $quantity, $stock, $category_id) {
+    $query = "UPDATE " . $this->table_products . " 
+              SET name = :name, 
+                  buy_price = :buy_price, 
+                  sell_price = :sell_price, 
+                  quantity = :quantity, 
+                  stock = :stock, 
+                  category_id = :category_id 
+              WHERE id = :id AND business_id = :business_id";
+    
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':id', $id);
+    $stmt->bindParam(':name', $name);
+    $stmt->bindParam(':buy_price', $buy_price);
+    $stmt->bindParam(':sell_price', $sell_price);
+    $stmt->bindParam(':quantity', $quantity);
+    $stmt->bindParam(':stock', $stock);
+    $stmt->bindParam(':category_id', $category_id);
+    $stmt->bindParam(':business_id', $this->business_id);
+    return $stmt->execute();
+}
     //delete sale function
     public function deleteSale($id) {
         try {
             $this->conn->beginTransaction();
     
             // Get the sale details first
-            $saleQuery = "SELECT product_id, quantity FROM " . $this->table_sales . " WHERE id = :id";
-            $saleStmt = $this->conn->prepare($saleQuery);
-            $saleStmt->bindParam(':id', $id);
-            $saleStmt->execute();
-    
+          $saleQuery = "SELECT product_id, quantity FROM " . $this->table_sales . " 
+                     WHERE id = :id AND business_id = :business_id";
+        $saleStmt = $this->conn->prepare($saleQuery);
+        $saleStmt->bindParam(':id', $id);
+        $saleStmt->bindParam(':business_id', $this->business_id);
+        $saleStmt->execute();
             if ($saleStmt->rowCount() === 0) {
                 throw new Exception("Sale not found");
             }
@@ -258,9 +280,10 @@ class user {
             $this->conn->beginTransaction();
     
             // Check if user exists first
-            $checkQuery = "SELECT id FROM " . $this->table_users . " WHERE id = :id";
+            $checkQuery = "SELECT id FROM " . $this->table_users . " WHERE id = :id AND business_id = :business_id";
             $checkStmt = $this->conn->prepare($checkQuery);
             $checkStmt->bindParam(':id', $id);
+            $checkStmt->bindParam(':business_id', $this->business_id);
             $checkStmt->execute();
     
             if ($checkStmt->rowCount() === 0) {
@@ -295,9 +318,10 @@ class user {
             $this->conn->beginTransaction();
     
             // Check if category exists first
-            $checkQuery = "SELECT id FROM " . $this->table_categories . " WHERE id = :id";
+            $checkQuery = "SELECT id FROM " . $this->table_categories . " WHERE id = :id AND business_id = :business_id";
             $checkStmt = $this->conn->prepare($checkQuery);
             $checkStmt->bindParam(':id', $id);
+            $checkStmt->bindParam(':business_id', $this->business_id);
             $checkStmt->execute();
     
             if ($checkStmt->rowCount() === 0) {
@@ -326,18 +350,21 @@ class user {
         }
     }
     //get category function
-    public function getCategory() {
-        $query = "SELECT id, name FROM " . $this->table_categories;
+     public function getCategory() {
+        $query = "SELECT id, name FROM " . $this->table_categories . 
+                 " WHERE business_id = :business_id";
         $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':business_id', $this->business_id);
         $stmt->execute();
         return $stmt;
     }   
     //add category function
-    public function addCategory($name) {
-      $query = "INSERT INTO categories (name) VALUES (:name)";
+  public function addCategory($name) {
+        $query = "INSERT INTO categories (name, business_id) VALUES (:name, :business_id)";
         $stmt = $this->conn->prepare($query);
         $stmt->bindParam(':name', $name);
-       return $stmt->execute();
+        $stmt->bindParam(':business_id', $this->business_id);
+        return $stmt->execute();
     }
    //add product function
     public function add_product($name, $photo, $quantity, $buy_price, $sell_price, $stock, $category_name) {
@@ -395,12 +422,12 @@ class user {
          
             $current_date = date('Y-m-d');
             // Insert product
-            $query = "INSERT INTO " . $this->table_products . " 
-                     (name, buy_price, sell_price, quantity, stock, date, category_id) 
+           $query = "INSERT INTO " . $this->table_products . " 
+                     (name, buy_price, sell_price, quantity, stock, date, category_id, business_id) 
                      VALUES 
-                     (:name,:buy_price, :sell_price, :quantity, :stock, :date, :category_id)";
+                     (:name, :buy_price, :sell_price, :quantity, :stock, :date, :category_id, :business_id)";
             $stmt = $this->conn->prepare($query);
-            
+            $stmt->bindParam(':business_id', $this->business_id);
             $stmt->bindParam(':name', $name);
             $stmt->bindParam(':buy_price', $buy_price);
             $stmt->bindParam(':sell_price', $sell_price);
@@ -456,6 +483,7 @@ class user {
             throw $e;
         }
     }
+     // Update getProducts() function
     public function getProducts() {
         $query = "SELECT DISTINCT p.id, p.name, p.buy_price, p.sell_price, 
                   p.quantity, p.stock, p.date, p.category_id,
@@ -463,9 +491,11 @@ class user {
                   FROM " . $this->table_products . " p 
                   LEFT JOIN " . $this->table_categories . " c ON p.category_id = c.id
                   LEFT JOIN images i ON p.id = i.product_id 
+                  WHERE p.business_id = :business_id
                   GROUP BY p.id
                   ORDER BY p.id ASC";
         $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':business_id', $this->business_id);
         $stmt->execute();
         return $stmt;
     }
@@ -476,9 +506,10 @@ class user {
             $this->conn->beginTransaction();
     
             // Check if product exists first
-            $checkQuery = "SELECT id FROM " . $this->table_products . " WHERE id = :id";
+            $checkQuery = "SELECT id FROM " . $this->table_products . " WHERE id = :id  AND business_id = :business_id";
             $checkStmt = $this->conn->prepare($checkQuery);
             $checkStmt->bindParam(':id', $id);
+            $checkStmt->bindParam(':business_id', $this->business_id);
             $checkStmt->execute();
     
             if ($checkStmt->rowCount() === 0) {
@@ -538,9 +569,11 @@ class user {
             $total_sales = $price * $quantity;
     
             // Insert sale record
-            $query = "INSERT INTO " . $this->table_sales . " (product_id, price, quantity, total_sales, date) 
-                     VALUES (:product_id, :price, :quantity, :total_sales, :date)";
+            $query = "INSERT INTO " . $this->table_sales . " 
+                     (product_id, price, quantity, total_sales, date, business_id) 
+                     VALUES (:product_id, :price, :quantity, :total_sales, :date, :business_id)";
             $stmt = $this->conn->prepare($query);
+            $stmt->bindParam(':business_id', $this->business_id);
             $stmt->bindParam(':product_id', $product_id);
             $stmt->bindParam(':price', $price);
             $stmt->bindParam(':quantity', $quantity);
@@ -571,14 +604,8 @@ class user {
     //get report function
     public function getSales() {
         $query = "SELECT 
-            s.id,
-            s.date,
-            s.quantity,
-            s.price,
-            p.name as product_name,
-            p.stock,
-            p.buy_price,
-            p.sell_price,
+            s.id, s.date, s.quantity, s.price,
+            p.name as product_name, p.stock, p.buy_price, p.sell_price,
             (s.price * s.quantity) as total,
             SUM(s.price * s.quantity) as grand_total,
             ((s.price * s.quantity) - (p.buy_price * s.quantity)) as profit,
@@ -586,23 +613,26 @@ class user {
             FROM " . $this->table_sales . " s
             LEFT JOIN " . $this->table_products . " p ON s.product_id = p.id
             LEFT JOIN " . $this->table_images . " i ON p.id = i.product_id
+            WHERE s.business_id = :business_id
             GROUP BY s.id
             ORDER BY s.date DESC";
         
         $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':business_id', $this->business_id);
         $stmt->execute();
         return $stmt;
     }
     public function getProductById($id) {
-        $query = "SELECT p.*, c.name as category_name 
-                  FROM " . $this->table_products . " p 
-                  LEFT JOIN " . $this->table_categories . " c 
-                  ON p.category_id = c.id 
-                  WHERE p.id = :id";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':id', $id);
-        $stmt->execute();
-        return $stmt->fetch(PDO::FETCH_ASSOC);
-    }
+    $query = "SELECT p.*, c.name as category_name 
+              FROM " . $this->table_products . " p 
+              LEFT JOIN " . $this->table_categories . " c ON p.category_id = c.id 
+              WHERE p.id = :id 
+              AND p.business_id = :business_id";
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':id', $id);
+    $stmt->bindParam(':business_id', $this->business_id);
+    $stmt->execute();
+    return $stmt->fetch(PDO::FETCH_ASSOC);
+}
  } 
 
