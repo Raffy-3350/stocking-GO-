@@ -2,7 +2,11 @@
 require_once '../config/database.php';
 require_once '../controllers/function.php';
 session_start();
-
+// Check for business_id in session
+if (!isset($_SESSION['user_id']) || !isset($_SESSION['business_id'])) {
+    header("Location: ../index.php");
+    exit;
+}
 $database = new Database();
 $db = $database->getConnection();
 //category
@@ -75,9 +79,51 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
             integrity="sha512-..." crossorigin="anonymous" referrerpolicy="no-referrer" />
       <link rel="stylesheet" href="../assets/css/styled.css">
       <link rel="shortcut icon" href="../assets/images/site-logo.png" type="image/x-icon">
+      
 </head>
 
 <body>
+    <script>
+            let isNavbarOpen = false;
+
+            function toggleNavbar() {
+                  const navbar = document.getElementById("navbar");
+                  const sections = document.querySelectorAll('.section');
+                  const menuBtn = document.getElementById("menu-btn");
+
+                  navbar.classList.toggle("open");
+                  sections.forEach(section => section.classList.toggle("shift"));
+
+                  isNavbarOpen = !isNavbarOpen;
+
+                  menuBtn.style.display = isNavbarOpen ? "none" : "block";
+            }
+
+            function showSection(sectionId) {
+                  const sections = document.querySelectorAll('.section');
+                  sections.forEach(section => section.classList.remove('active'));
+
+                  document.getElementById(sectionId).classList.add('active');
+            }
+
+            function toggleAdminMenu() {
+                  const dropdown = document.getElementById('dropdown-content');
+                  dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
+            }
+
+            function logout() {
+                  alert("Feature Unavailable...");
+            }
+
+            window.onclick = function (event) {
+                  if (!event.target.matches('.admin-btn')) {
+                        const dropdown = document.getElementById('dropdown-content');
+                        if (dropdown.style.display === 'block') {
+                              dropdown.style.display = 'none';
+                        }
+                  }
+            }
+      </script>
       <!-- Menu button -->
       <button class="menu-btn" id="menu-btn" onclick="toggleNavbar()">
             <img src="../assets/images/logo-nav.png" alt="">
@@ -112,27 +158,29 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
             <div class="wrappered">
                   <div class="row">
                         <div class="container-dash">
-                              <div class="back">
-                                    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;<?php 
-    $query = "SELECT COUNT(*) as total FROM users";
+                             <div class="back">
+    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;<?php 
+    $query = "SELECT COUNT(*) as total FROM users WHERE business_id = :business_id";
     $stmt = $db->prepare($query);
+    $stmt->bindParam(':business_id', $_SESSION['business_id']);
     $stmt->execute();
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     echo $result['total']; ?>&ensp;<br>&emsp;&emsp;&emsp;Members</p>
-                              </div>
+</div>
                               <div class="front1"><i class="fa fa-users"
                                           style="font-size: 74px; display: flex ; justify-content: center; margin-top: 45%;"></i>
                               </div>
                         </div>
                         <div class="container-dash">
-                              <div class="back">
-                                    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
-    $query = "SELECT COUNT(*) as total FROM categories";
+                            <div class="back">
+    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
+    $query = "SELECT COUNT(*) as total FROM categories WHERE business_id = :business_id";
     $stmt = $db->prepare($query);
+    $stmt->bindParam(':business_id', $_SESSION['business_id']);
     $stmt->execute();
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     echo $result['total']; ?><br>&emsp;&emsp;&nbsp;Categories</p>
-                              </div>
+</div>
                               <div class="front2"><i class="fa fa-cubes"
                                           style="font-size: 74px; display: flex ; justify-content: center; margin-top: 45%;"></i>
                               </div>
@@ -142,26 +190,28 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
                   <div class="row">
                         <div class="container-dash">
                               <div class="back">
-                                    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
-    $query = "SELECT COUNT(*) as total FROM products";
+    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
+    $query = "SELECT COUNT(*) as total FROM products WHERE business_id = :business_id";
     $stmt = $db->prepare($query);
+    $stmt->bindParam(':business_id', $_SESSION['business_id']);
     $stmt->execute();
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     echo $result['total']; ?><br>&emsp;&emsp;&emsp;Products</p>
-                              </div>
+</div>
                               <div class="front3"><i class="fa fa-shopping-cart"
                                           style="font-size: 74px; display: flex ; justify-content: center; margin-top: 45%;"></i>
                               </div>
                         </div>
                         <div class="container-dash">
-                              <div class="back">
-                                    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
-    $query = "SELECT COUNT(*) as total FROM sales";
+                           <div class="back">
+    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
+    $query = "SELECT COUNT(*) as total FROM sales WHERE business_id = :business_id";
     $stmt = $db->prepare($query);
+    $stmt->bindParam(':business_id', $_SESSION['business_id']);
     $stmt->execute();
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     echo $result['total']; ?><br>&emsp;&emsp;&emsp;&ensp;Sales</p>
-                              </div>
+</div>
                               <div class="front4"><i class="fa fa-usd"
                                           style="font-size: 74px; display: flex ; justify-content: center; margin-top: 45%;"></i>
                               </div>
@@ -170,14 +220,15 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
 
                   <div class="row">
                         <div class="container-dash">
-                              <div class="back">
-                                    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
-    $query = "SELECT COUNT(*) as total FROM sales";
+                             <div class="back">
+    <p><br><br><br>&emsp;&emsp;&emsp;&emsp;&ensp;<?php 
+    $query = "SELECT COUNT(*) as total FROM sales WHERE business_id = :business_id";
     $stmt = $db->prepare($query);
+    $stmt->bindParam(':business_id', $_SESSION['business_id']);
     $stmt->execute();
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
-    echo $result['total']; ?><br>&emsp;&emsp;&emsp;Reports</p>
-                              </div>
+    echo $result['total']; ?><br>&emsp;&emsp;&emsp;&ensp;Sales</p>
+</div>
                               <div class="front5"><i class="fa fa-bar-chart"
                                           style="font-size: 74px; display: flex ; justify-content: center; margin-top: 45%;"></i>
                               </div>
@@ -188,8 +239,15 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
 
       <div class="section" id="members">
             <!-- MEMBERS -->
+             
             <div class="container">
-                  <h2>Stocking Go!</h2>
+                <div class="section" id="members">
+    <div class="container">
+        <h2><?php echo isset($_SESSION['business_name']) ? $_SESSION['business_name'] : 'NONE'; ?></h2>
+        
+       
+      
+                  <h2><?php echo isset ($_SESSION['business_name']) ? $_SESSION['business_name']: 'NONE';?></h2>
                   <table class="employee-table">
                         <thead>
                               <tr>
@@ -524,48 +582,6 @@ document.addEventListener('DOMContentLoaded', function() {
         </table>
     </div>
 </div>
-
-      <script>
-            let isNavbarOpen = false;
-
-            function toggleNavbar() {
-                  const navbar = document.getElementById("navbar");
-                  const sections = document.querySelectorAll('.section');
-                  const menuBtn = document.getElementById("menu-btn");
-
-                  navbar.classList.toggle("open");
-                  sections.forEach(section => section.classList.toggle("shift"));
-
-                  isNavbarOpen = !isNavbarOpen;
-
-                  menuBtn.style.display = isNavbarOpen ? "none" : "block";
-            }
-
-            function showSection(sectionId) {
-                  const sections = document.querySelectorAll('.section');
-                  sections.forEach(section => section.classList.remove('active'));
-
-                  document.getElementById(sectionId).classList.add('active');
-            }
-
-            function toggleAdminMenu() {
-                  const dropdown = document.getElementById('dropdown-content');
-                  dropdown.style.display = dropdown.style.display === 'block' ? 'none' : 'block';
-            }
-
-            function logout() {
-                  alert("Feature Unavailable...");
-            }
-
-            window.onclick = function (event) {
-                  if (!event.target.matches('.admin-btn')) {
-                        const dropdown = document.getElementById('dropdown-content');
-                        if (dropdown.style.display === 'block') {
-                              dropdown.style.display = 'none';
-                        }
-                  }
-            }
-      </script>
 
 </body>
 
