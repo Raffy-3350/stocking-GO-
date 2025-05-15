@@ -18,6 +18,11 @@ class user {
     //register function
 public function register($name, $password, $email, $bussname, $confirm) {
     try {
+        // Validate database connection
+        if (!$this->conn) {
+            return ["Database error: No connection established"];
+        }
+
         // Start transaction
         $this->conn->beginTransaction();
         
@@ -45,7 +50,7 @@ public function register($name, $password, $email, $bussname, $confirm) {
         if (!preg_match("/[0-9]/", $password)) {
             $errors[] = "Password must contain at least one number.";
         }
-        if (!preg_match("/[\W_]/", $password)) {
+        if (!preg_match("/[^a-zA-Z0-9]/", $password)) {
             $errors[] = "Password must contain at least one special character.";
         }
         if (empty($email)) {
@@ -57,22 +62,27 @@ public function register($name, $password, $email, $bussname, $confirm) {
             $errors[] = "Business name is required.";
         }
 
-        // Check if email already exists
-        $checkEmailQuery = "SELECT id FROM " . $this->table_users . " WHERE email = :email LIMIT 1";
-        $checkEmailStmt = $this->conn->prepare($checkEmailQuery);
-        $checkEmailStmt->bindParam(':email', $email);
-        $checkEmailStmt->execute();
-        if ($checkEmailStmt->rowCount() > 0) {
-            $errors[] = "Email already exists.";
-        }
+        // Only proceed with database checks if basic validation passed
+        if (empty($errors)) {
+            // Check if email already exists
+            $checkEmailQuery = "SELECT id FROM " . $this->table_users . " WHERE email = :email LIMIT 1";
+            $checkEmailStmt = $this->conn->prepare($checkEmailQuery);
+            $checkEmailStmt->bindParam(':email', $email);
+            if (!$checkEmailStmt->execute()) {
+                $errors[] = "Database error checking email";
+            } elseif ($checkEmailStmt->rowCount() > 0) {
+                $errors[] = "Email already exists.";
+            }
 
-        // Check if business name already exists
-        $checkBussNameQuery = "SELECT id FROM " . $this->table_users . " WHERE business_name = :business_name LIMIT 1";
-        $checkBussNameStmt = $this->conn->prepare($checkBussNameQuery);
-        $checkBussNameStmt->bindParam(':business_name', $bussname);
-        $checkBussNameStmt->execute();
-        if ($checkBussNameStmt->rowCount() > 0) {
-            $errors[] = "Business name already exists.";
+            // Check if business name already exists
+            $checkBussNameQuery = "SELECT id FROM " . $this->table_users . " WHERE business_name = :business_name LIMIT 1";
+            $checkBussNameStmt = $this->conn->prepare($checkBussNameQuery);
+            $checkBussNameStmt->bindParam(':business_name', $bussname);
+            if (!$checkBussNameStmt->execute()) {
+                $errors[] = "Database error checking business name";
+            } elseif ($checkBussNameStmt->rowCount() > 0) {
+                $errors[] = "Business name already exists.";
+            }
         }
 
         // If there are errors, return them
@@ -84,12 +94,13 @@ public function register($name, $password, $email, $bussname, $confirm) {
         // Hash the password
         $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
-        // Insert new user
+        // Insert new user with temporary business_id (0)
         $query = "INSERT INTO " . $this->table_users . " 
-                 (name, password, email, business_name) 
+                 (name, password, email, business_name, business_id) 
                  VALUES 
-                 (:name, :password, :email, :business_name)";
+                 (:name, :password, :email, :business_name, 0)";  // Temporary value
         $stmt = $this->conn->prepare($query);
+        
         $stmt->bindParam(':name', $name);
         $stmt->bindParam(':password', $passwordHash);
         $stmt->bindParam(':email', $email);
@@ -97,37 +108,45 @@ public function register($name, $password, $email, $bussname, $confirm) {
         
         if ($stmt->execute()) {
             $user_id = $this->conn->lastInsertId();
-
-            // Update business_id
+            $business_id = $user_id; // Set business_id same as user_id
+            
+            // Update business_id with actual value
             $updateQuery = "UPDATE " . $this->table_users . " 
                           SET business_id = :business_id 
                           WHERE id = :id";
             $updateStmt = $this->conn->prepare($updateQuery);
-            $updateStmt->bindParam(':business_id', $user_id);
+            $updateStmt->bindParam(':business_id', $business_id);
             $updateStmt->bindParam(':id', $user_id);
-            $updateStmt->execute();
+            
+            if (!$updateStmt->execute()) {
+                $this->conn->rollBack();
+                return ["Database error updating business ID"];
+            }
 
             // Create initial login log
             $logQuery = "INSERT INTO login_logs (user_id, business_id, login_time) 
                         VALUES (:user_id, :business_id, NOW())";
             $logStmt = $this->conn->prepare($logQuery);
             $logStmt->bindParam(':user_id', $user_id);
-            $logStmt->bindParam(':business_id', $user_id);
-            $logStmt->execute();
+            $logStmt->bindParam(':business_id', $business_id);
+            
+            if (!$logStmt->execute()) {
+                $this->conn->rollBack();
+                return ["Database error creating login log"];
+            }
 
             $this->conn->commit();
             return true;
+        } else {
+            $this->conn->rollBack();
+            return ["Registration failed. Please try again."];
         }
-
-        $this->conn->rollBack();
-        return ["Registration failed. Please try again."];
 
     } catch (PDOException $e) {
         if ($this->conn->inTransaction()) {
             $this->conn->rollBack();
         }
-        error_log($e->getMessage());
-        return ["Database error: Please try again later."];
+        return ["Database error: " . $e->getMessage()];
     }
 }
     
@@ -598,20 +617,23 @@ public function members() {
     }
      // Update getProducts() function
     public function getProducts() {
-        $query = "SELECT DISTINCT p.id, p.name, p.buy_price, p.sell_price, 
-                  p.quantity, p.stock, p.date, p.category_id,
-                  i.image_path, c.name as category_name
-                  FROM " . $this->table_products . " p 
-                  LEFT JOIN " . $this->table_categories . " c ON p.category_id = c.id
-                  LEFT JOIN images i ON p.id = i.product_id 
-                  WHERE p.business_id = :business_id
-                  GROUP BY p.id
-                  ORDER BY p.id ASC";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':business_id', $this->business_id);
-        $stmt->execute();
-        return $stmt;
-    }
+    $query = "SELECT p.id, p.name, p.buy_price, p.sell_price, 
+                     p.quantity, p.stock, p.date, p.category_id,
+                     MIN(i.image_path) AS image_path, 
+                     c.name AS category_name
+              FROM " . $this->table_products . " p 
+              LEFT JOIN " . $this->table_categories . " c ON p.category_id = c.id
+              LEFT JOIN images i ON p.id = i.product_id 
+              WHERE p.business_id = :business_id
+              GROUP BY p.id, p.name, p.buy_price, p.sell_price, 
+                       p.quantity, p.stock, p.date, p.category_id, c.name
+              ORDER BY p.id ASC";
+
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':business_id', $this->business_id);
+    $stmt->execute();
+    return $stmt;
+}
     //delete product function
     public function deleteProduct($id) {
         try {
