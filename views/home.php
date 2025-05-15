@@ -296,27 +296,33 @@ document.addEventListener('DOMContentLoaded', function() {
                         </thead>
                         <tbody>
  <?php
- $stmt = $user->members();
-while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
-    echo "<tr>";
-    echo "<td class='employee-cell'>" . htmlspecialchars($row['id']) . "</td>";
-    echo "<td class='employee-cell'>" . htmlspecialchars($row['first_name']) . "</td>";
-    echo "<td class='employee-cell'>" . htmlspecialchars($row['last_name']) . "</td>";
-    echo "<td class='employee-cell'>" . htmlspecialchars($row['employee_id']) . "</td>";
-    echo "<td class='icons employee-cell'>";
-    echo "<span class='edit-icon'><a href='../models/edit.php?id=" . htmlspecialchars($row['id']) . "'>✏️</a></span>";
-    echo "<span class='delete-icon'><a href='../models/delete.php?id=" . htmlspecialchars($row['id']) . "'>🗑️</a></span>";
-    echo "</td>";
-   echo "<td class='employee-cell'>";
-// Get login logs for this user
-$logs = $user->getUserLogs($row['id']);
-if ($logs) {
-    $log = $logs[0]; // Get most recent log
-    echo "Last login: " . htmlspecialchars($log['login_time']) . "<br>";
+$stmt = $user->members();
+if ($stmt->rowCount() > 0) {
+    while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+        echo "<tr>";
+        echo "<td class='employee-cell'>" . htmlspecialchars($row['id']) . "</td>";
+        echo "<td class='employee-cell'>" . htmlspecialchars($row['first_name']) . "</td>";
+        echo "<td class='employee-cell'>" . htmlspecialchars($row['last_name']) . "</td>";
+        echo "<td class='employee-cell'>" . htmlspecialchars($row['employee_id']) . "</td>";
+        echo "<td class='icons employee-cell'>";
+        echo "<span class='edit-icon'><a href='../models/edit.php?id=" . htmlspecialchars($row['id']) . "'>✏️</a></span>";
+        echo "<span class='delete-icon'><a href='../models/delete.php?id=" . htmlspecialchars($row['id']) . "'>🗑️</a></span>";
+        echo "</td>";
+        echo "<td class='employee-cell'>";
+        // Get login logs for this user
+        $logs = $user->getUserLogs($row['id']);
+        if ($logs) {
+            $log = $logs[0]; // Get most recent log
+            echo "Last login: " . htmlspecialchars($log['login_time']) . "<br>";
+        } else {
+            echo "No login history";
+        }
+        echo "</td>";
+        echo "</tr>";
+    }
 } else {
-    echo "No login history";
-}
-echo "</td>";
+    echo "<tr>";
+    echo "<h2><td colspan='7' class='no-data'>No members found</td></h2>";
     echo "</tr>";
 }
 ?>                            
