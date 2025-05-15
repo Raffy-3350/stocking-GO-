@@ -197,9 +197,14 @@ document.addEventListener('DOMContentLoaded', function() {
                         <div class="container-dash">
                              <div class="back">
     <p><br><br><br>&emsp;&emsp;&emsp;&emsp;<?php 
-    $query = "SELECT COUNT(*) as total FROM users WHERE business_id = :business_id";
+     $query = "SELECT COUNT(*) as total FROM users 
+              WHERE business_id = :business_id 
+              AND added_by = :added_by 
+              AND id != :current_user_id";
     $stmt = $db->prepare($query);
     $stmt->bindParam(':business_id', $_SESSION['business_id']);
+    $stmt->bindParam(':added_by', $_SESSION['user_id']);
+    $stmt->bindParam(':current_user_id', $_SESSION['user_id']);
     $stmt->execute();
     $result = $stmt->fetch(PDO::FETCH_ASSOC);
     echo $result['total']; ?>&ensp;<br>&emsp;&emsp;&emsp;Members</p>
