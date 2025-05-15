@@ -3,7 +3,7 @@
 -- https://www.phpmyadmin.net/
 --
 -- Host: 127.0.0.1
--- Generation Time: May 07, 2025 at 03:19 PM
+-- Generation Time: May 15, 2025 at 06:39 PM
 -- Server version: 10.4.32-MariaDB
 -- PHP Version: 8.2.12
 
@@ -29,16 +29,17 @@ SET time_zone = "+00:00";
 
 CREATE TABLE `categories` (
   `id` int(11) NOT NULL,
-  `name` varchar(50) NOT NULL
+  `name` varchar(50) NOT NULL,
+  `business_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `categories`
 --
 
-INSERT INTO `categories` (`id`, `name`) VALUES
-(1, 'Gadgets'),
-(3, 'naturals');
+INSERT INTO `categories` (`id`, `name`, `business_id`) VALUES
+(10, 'joshua', 0),
+(11, 'pogi', 13);
 
 -- --------------------------------------------------------
 
@@ -49,16 +50,16 @@ INSERT INTO `categories` (`id`, `name`) VALUES
 CREATE TABLE `images` (
   `id` int(11) NOT NULL,
   `product_id` int(11) NOT NULL,
-  `image_path` varchar(255) NOT NULL
+  `image_path` varchar(255) NOT NULL,
+  `business_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `images`
 --
 
-INSERT INTO `images` (`id`, `product_id`, `image_path`) VALUES
-(2, 2, '2ab16674c276f4de29448d3eb682aefb.jpeg'),
-(3, 3, '9907dfaac0c6b181949aacba886560f7.jpeg');
+INSERT INTO `images` (`id`, `product_id`, `image_path`, `business_id`) VALUES
+(8, 8, 'f7098524be99bcafe5f097980361beb8.jpeg', 0);
 
 -- --------------------------------------------------------
 
@@ -74,16 +75,16 @@ CREATE TABLE `products` (
   `quantity` int(11) NOT NULL,
   `stock` varchar(50) NOT NULL,
   `date` date NOT NULL,
-  `category_id` int(11) NOT NULL
+  `category_id` int(11) NOT NULL,
+  `business_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `products`
 --
 
-INSERT INTO `products` (`id`, `name`, `buy_price`, `sell_price`, `quantity`, `stock`, `date`, `category_id`) VALUES
-(2, 'mari', 100.00, 200.00, 0, 'In Stock', '2025-05-07', 3),
-(3, 'mari', 100.00, 200.00, 10, 'In Stock', '2025-05-07', 3);
+INSERT INTO `products` (`id`, `name`, `buy_price`, `sell_price`, `quantity`, `stock`, `date`, `category_id`, `business_id`) VALUES
+(8, 'KUPAl', 200.00, 300.00, 10, 'In Stock', '2025-05-13', 11, 13);
 
 -- --------------------------------------------------------
 
@@ -97,15 +98,9 @@ CREATE TABLE `sales` (
   `quantity` int(11) NOT NULL,
   `price` decimal(10,2) NOT NULL,
   `total_sales` decimal(10,2) NOT NULL,
-  `date` date NOT NULL
+  `date` date NOT NULL,
+  `business_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
-
---
--- Dumping data for table `sales`
---
-
-INSERT INTO `sales` (`id`, `product_id`, `quantity`, `price`, `total_sales`, `date`) VALUES
-(2, 2, 10, 200.00, 2000.00, '2025-05-08');
 
 -- --------------------------------------------------------
 
@@ -118,15 +113,17 @@ CREATE TABLE `users` (
   `name` varchar(50) NOT NULL,
   `business_name` varchar(50) NOT NULL,
   `password` varchar(255) NOT NULL,
-  `email` varchar(50) NOT NULL
+  `email` varchar(50) NOT NULL,
+  `business_id` int(11) NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci;
 
 --
 -- Dumping data for table `users`
 --
 
-INSERT INTO `users` (`id`, `name`, `business_name`, `password`, `email`) VALUES
-(11, 'Joshua Sierrapodi tlga', 'boss j', '$2y$10$/LEfItaS95rtxshO0EuoBOL3toSRT0Td1fAn.PtS9wM8E68344I6W', 'jush@gmail.com');
+INSERT INTO `users` (`id`, `name`, `business_name`, `password`, `email`, `business_id`) VALUES
+(12, 'Joshua arncel', 'jush@gmail.com', '$2y$10$OVsMzWyQFs4XQVsY7dnahu9se9rxfKAYHQkuplXy1JewgbGKr0vzq', 'jush@gmail.com', 0),
+(13, 'john doe', 'boss j', '$2y$10$UH9Q12FvUD4p3uipMGowu.XRKhtCvlfEYjXr3lDQPoG09Uzm.z/YS', 'admin@gmail.com', 0);
 
 --
 -- Indexes for dumped tables
@@ -137,35 +134,40 @@ INSERT INTO `users` (`id`, `name`, `business_name`, `password`, `email`) VALUES
 --
 ALTER TABLE `categories`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `name` (`name`);
+  ADD UNIQUE KEY `name` (`name`),
+  ADD KEY `idx_business_categories` (`business_id`);
 
 --
 -- Indexes for table `images`
 --
 ALTER TABLE `images`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `product_id` (`product_id`);
+  ADD KEY `product_id` (`product_id`),
+  ADD KEY `idx_business_images` (`business_id`);
 
 --
 -- Indexes for table `products`
 --
 ALTER TABLE `products`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `category_id` (`category_id`);
+  ADD KEY `category_id` (`category_id`),
+  ADD KEY `idx_business_products` (`business_id`);
 
 --
 -- Indexes for table `sales`
 --
 ALTER TABLE `sales`
   ADD PRIMARY KEY (`id`),
-  ADD KEY `product_id` (`product_id`);
+  ADD KEY `product_id` (`product_id`),
+  ADD KEY `idx_business_sales` (`business_id`);
 
 --
 -- Indexes for table `users`
 --
 ALTER TABLE `users`
   ADD PRIMARY KEY (`id`),
-  ADD UNIQUE KEY `email` (`email`);
+  ADD UNIQUE KEY `email` (`email`),
+  ADD KEY `idx_business_users` (`business_id`);
 
 --
 -- AUTO_INCREMENT for dumped tables
@@ -175,31 +177,31 @@ ALTER TABLE `users`
 -- AUTO_INCREMENT for table `categories`
 --
 ALTER TABLE `categories`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=13;
 
 --
 -- AUTO_INCREMENT for table `images`
 --
 ALTER TABLE `images`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `products`
 --
 ALTER TABLE `products`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=7;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=9;
 
 --
 -- AUTO_INCREMENT for table `sales`
 --
 ALTER TABLE `sales`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=3;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=4;
 
 --
 -- AUTO_INCREMENT for table `users`
 --
 ALTER TABLE `users`
-  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=12;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=14;
 
 --
 -- Constraints for dumped tables
