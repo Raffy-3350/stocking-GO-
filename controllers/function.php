@@ -16,7 +16,11 @@ class user {
     }
 
     //register function
-    public function register($name, $password, $email, $bussname, $confirm) {
+public function register($name, $password, $email, $bussname, $confirm) {
+    try {
+        // Start transaction
+        $this->conn->beginTransaction();
+        
         // Initialize errors array
         $errors = [];
         
@@ -52,64 +56,80 @@ class user {
         if (empty($bussname)) {
             $errors[] = "Business name is required.";
         }
-    
-        // If there are errors, return them to the controller
-        if (!empty($errors)) {
-            return $errors; // This will display the errors in the front-end
-        }
-    
-        // If no validation errors, proceed with inserting the data
-       $query = "INSERT INTO " . $this->table_users . " 
-              (name, password, email, business_name, business_id) 
-              VALUES 
-              (:name, :password, :email, :business_name, :business_id)";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':name', $name);
-    
-        // Hash the password before storing it
-        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-        $stmt->bindParam(':password', $passwordHash);
-        $stmt->bindParam(':email', $email);
-        $stmt->bindParam(':business_name', $bussname);
-        if ($stmt->execute()) {
-        $business_id = $this->conn->lastInsertId();
-        // Update the user's business_id
-        $updateQuery = "UPDATE " . $this->table_users . " 
-                       SET business_id = :business_id 
-                       WHERE id = :id";
-        $updateStmt = $this->conn->prepare($updateQuery);
-        $updateStmt->bindParam(':business_id', $business_id);
-        $updateStmt->bindParam(':id', $business_id);
-        $updateStmt->execute();
-        
-        return true;
-    }
+
         // Check if email already exists
         $checkEmailQuery = "SELECT id FROM " . $this->table_users . " WHERE email = :email LIMIT 1";
         $checkEmailStmt = $this->conn->prepare($checkEmailQuery);
         $checkEmailStmt->bindParam(':email', $email);
         $checkEmailStmt->execute();
         if ($checkEmailStmt->rowCount() > 0) {
-            return ["Email already exists."]; // Return this error if email exists
+            $errors[] = "Email already exists.";
         }
-    
+
         // Check if business name already exists
         $checkBussNameQuery = "SELECT id FROM " . $this->table_users . " WHERE business_name = :business_name LIMIT 1";
         $checkBussNameStmt = $this->conn->prepare($checkBussNameQuery);
         $checkBussNameStmt->bindParam(':business_name', $bussname);
         $checkBussNameStmt->execute();
         if ($checkBussNameStmt->rowCount() > 0) {
-            return ["Business name already exists."]; // Return this error if business name exists
+            $errors[] = "Business name already exists.";
         }
-    
-        // Finally, execute the insert query
+
+        // If there are errors, return them
+        if (!empty($errors)) {
+            $this->conn->rollBack();
+            return $errors;
+        }
+
+        // Hash the password
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+
+        // Insert new user
+        $query = "INSERT INTO " . $this->table_users . " 
+                 (name, password, email, business_name) 
+                 VALUES 
+                 (:name, :password, :email, :business_name)";
+        $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':name', $name);
+        $stmt->bindParam(':password', $passwordHash);
+        $stmt->bindParam(':email', $email);
+        $stmt->bindParam(':business_name', $bussname);
+        
         if ($stmt->execute()) {
-            return true; // Registration was successful
-        } else {
-            // If insert fails, return the error message
-            return ["Database error: " . implode(", ", $stmt->errorInfo())];
+            $user_id = $this->conn->lastInsertId();
+
+            // Update business_id
+            $updateQuery = "UPDATE " . $this->table_users . " 
+                          SET business_id = :business_id 
+                          WHERE id = :id";
+            $updateStmt = $this->conn->prepare($updateQuery);
+            $updateStmt->bindParam(':business_id', $user_id);
+            $updateStmt->bindParam(':id', $user_id);
+            $updateStmt->execute();
+
+            // Create initial login log
+            $logQuery = "INSERT INTO login_logs (user_id, business_id, login_time) 
+                        VALUES (:user_id, :business_id, NOW())";
+            $logStmt = $this->conn->prepare($logQuery);
+            $logStmt->bindParam(':user_id', $user_id);
+            $logStmt->bindParam(':business_id', $user_id);
+            $logStmt->execute();
+
+            $this->conn->commit();
+            return true;
         }
+
+        $this->conn->rollBack();
+        return ["Registration failed. Please try again."];
+
+    } catch (PDOException $e) {
+        if ($this->conn->inTransaction()) {
+            $this->conn->rollBack();
+        }
+        error_log($e->getMessage());
+        return ["Database error: Please try again later."];
     }
+}
     
    //login function
 public function login($email, $password) {
