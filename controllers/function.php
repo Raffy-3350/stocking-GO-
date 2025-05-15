@@ -123,9 +123,19 @@ public function login($email, $password) {
     
     if ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
         if (password_verify($password, $row['password'])) {
+            // Create login log entry
+            $logQuery = "INSERT INTO login_logs (user_id, business_id, login_time) 
+                        VALUES (:user_id, :business_id, NOW())";
+            $logStmt = $this->conn->prepare($logQuery);
+            $logStmt->bindParam(':user_id', $row['id']);
+            $logStmt->bindParam(':business_id', $row['business_id']);
+            $logStmt->execute();
+            
+            // Store log_id in session for logout tracking
+            $_SESSION['log_id'] = $this->conn->lastInsertId();
             $_SESSION['user_id'] = $row['id'];
             $_SESSION['email'] = $row['email'];
-            $_SESSION['business_id'] = $row['id']; // Set business_id same as user_id for isolation
+            $_SESSION['business_id'] = $row['business_id'];
             $_SESSION['name'] = $row['name'];
             $_SESSION['business_name'] = $row['business_name'];
             
@@ -134,9 +144,8 @@ public function login($email, $password) {
                 'user_id' => $row['id'],
                 'user_email' => $row['email'],
                 'user_name' => $row['name'],
-                'business_id' => $row['id'], // Use user_id as business_id
-                'business_name' => $row['business_name'],
-                'message' => 'Login successful'
+                'business_id' => $row['business_id'],
+                'business_name' => $row['business_name']
             ];
         }
     }
@@ -144,6 +153,84 @@ public function login($email, $password) {
         'success' => false,
         'message' => 'Invalid email or password'
     ];
+}
+public function addMember($name, $email, $password, $confirm_password) {
+    try {
+        // Validation
+        if (empty($name) || empty($email) || empty($password)) {
+            throw new Exception("All fields are required");
+        }
+
+        if ($password !== $confirm_password) {
+            throw new Exception("Passwords do not match");
+        }
+
+        // Check if email already exists
+        $checkQuery = "SELECT id FROM " . $this->table_users . " 
+                      WHERE email = :email AND business_id = :business_id";
+        $checkStmt = $this->conn->prepare($checkQuery);
+        $checkStmt->bindParam(':email', $email);
+        $checkStmt->bindParam(':business_id', $this->business_id);
+        $checkStmt->execute();
+
+        if ($checkStmt->rowCount() > 0) {
+            throw new Exception("Email already exists");
+        }
+
+        // Hash password
+        $passwordHash = password_hash($password, PASSWORD_DEFAULT);
+
+        // Insert new member
+         $query = "INSERT INTO " . $this->table_users . " 
+                 (name, email, password, business_id, business_name, added_by) 
+                 VALUES 
+                 (:name, :email, :password, :business_id, :business_name, :added_by)";
+        
+       $stmt = $this->conn->prepare($query);
+        $stmt->bindParam(':name', $name);
+        $stmt->bindParam(':email', $email);
+        $stmt->bindParam(':password', $passwordHash);
+        $stmt->bindParam(':business_id', $this->business_id);
+        $stmt->bindParam(':business_name', $_SESSION['business_name']);
+        $stmt->bindParam(':added_by', $_SESSION['user_id']); 
+
+        if ($stmt->execute()) {
+            // Create initial login log entry
+            $user_id = $this->conn->lastInsertId();
+            $logQuery = "INSERT INTO login_logs (user_id, business_id, login_time) 
+                        VALUES (:user_id, :business_id, NOW())";
+            $logStmt = $this->conn->prepare($logQuery);
+            $logStmt->bindParam(':user_id', $user_id);
+            $logStmt->bindParam(':business_id', $this->business_id);
+            $logStmt->execute();
+            
+            return true;
+        }
+        throw new Exception("Failed to add member");
+
+    } catch (Exception $e) {
+        return ['error' => $e->getMessage()];
+    }
+}
+public function getUserLogs($user_id) {
+    $query = "SELECT 
+                login_time,
+                CASE 
+                    WHEN login_time >= DATE_SUB(NOW(), INTERVAL 5 MINUTE) THEN 'Online'
+                    ELSE 'Offline'
+                END as status
+              FROM login_logs 
+              WHERE user_id = :user_id 
+              AND business_id = :business_id
+              ORDER BY login_time DESC 
+              LIMIT 1";
+              
+    $stmt = $this->conn->prepare($query);
+    $stmt->bindParam(':user_id', $user_id);
+    $stmt->bindParam(':business_id', $this->business_id);
+    $stmt->execute();
+    
+    return $stmt->fetchAll(PDO::FETCH_ASSOC);
 }
     
     //check if user is logged in
@@ -158,16 +245,22 @@ public function login($email, $password) {
         unset($_SESSION['email']);
     }
      //members function
-     public function members() {
+public function members() {
     $query = "SELECT 
                 id, 
+                name,
                 SUBSTRING_INDEX(name, ' ', 1) AS first_name, 
                 SUBSTRING_INDEX(name, ' ', -1) AS last_name,
                 CONCAT('EMP', LPAD(id, 2, '0')) AS employee_id
               FROM " . $this->table_users . "
-              WHERE business_id = :business_id";
+              WHERE business_id = :business_id 
+              AND id != :current_user_id
+              AND added_by = :business_owner_id"; // Only show members added by the business owner
+
     $stmt = $this->conn->prepare($query);
     $stmt->bindParam(':business_id', $this->business_id);
+    $stmt->bindParam(':current_user_id', $_SESSION['user_id']);
+    $stmt->bindParam(':business_owner_id', $_SESSION['user_id']);
     $stmt->execute();
     return $stmt;
 }
