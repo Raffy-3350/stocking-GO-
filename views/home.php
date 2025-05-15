@@ -9,7 +9,29 @@ if (!isset($_SESSION['user_id']) || !isset($_SESSION['business_id'])) {
 }
 $database = new Database();
 $db = $database->getConnection();
+$user = new user($db); 
 //category
+// Add this with your other POST handlers
+if (isset($_POST['add_member'])) {
+    $name = trim($_POST['member_name']);
+    $email = trim($_POST['member_email']);
+    $password = $_POST['member_password'];
+    $confirm = $_POST['confirm_password'];
+    
+    try {
+        $result = $user->addMember($name, $email, $password, $confirm);
+        if ($result === true) {
+            $_SESSION['success'] = "Member added successfully!";
+            header("Location: " . $_SERVER['PHP_SELF']);
+            exit;
+        } else {
+            $_SESSION['error'] = is_array($result) ? implode(", ", $result) : "Failed to add member";
+        }
+    } catch (Exception $e) {
+        $_SESSION['error'] = $e->getMessage();
+    }
+}
+
 $user = new user($db);
 if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
       $name = trim($_POST['name']); // Get and sanitize the category name
@@ -99,12 +121,27 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
                   menuBtn.style.display = isNavbarOpen ? "none" : "block";
             }
 
-            function showSection(sectionId) {
-                  const sections = document.querySelectorAll('.section');
-                  sections.forEach(section => section.classList.remove('active'));
+       // Replace your current showSection function with this
+function showSection(sectionId) {
+    // Hide all sections
+    const sections = document.querySelectorAll('.section');
+    sections.forEach(section => {
+        section.style.display = 'none';
+        section.classList.remove('active');
+    });
 
-                  document.getElementById(sectionId).classList.add('active');
-            }
+    // Show selected section
+    const selectedSection = document.getElementById(sectionId);
+    if (selectedSection) {
+        selectedSection.style.display = 'block';
+        selectedSection.classList.add('active');
+    }
+}
+
+// Add this to ensure dashboard shows by default
+document.addEventListener('DOMContentLoaded', function() {
+    showSection('dashboard');
+});
 
             function toggleAdminMenu() {
                   const dropdown = document.getElementById('dropdown-content');
@@ -237,16 +274,9 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
             </div>
       </div>
 
-      <div class="section" id="members">
             <!-- MEMBERS -->
-             
-            <div class="container">
                 <div class="section" id="members">
-    <div class="container">
-        <h2><?php echo isset($_SESSION['business_name']) ? $_SESSION['business_name'] : 'NONE'; ?></h2>
-        
-       
-      
+    <div class="container"> 
                   <h2><?php echo isset ($_SESSION['business_name']) ? $_SESSION['business_name']: 'NONE';?></h2>
                   <table class="employee-table">
                         <thead>
@@ -256,28 +286,67 @@ if (isset($_POST['add']) && isset($_POST['name']) && !empty($_POST['name'])) {
                                     <th class="employee-header">First Name</th>
                                     <th class="employee-header">Employee ID</th>
                                     <th class="employee-header">Edit</th>
+                                    <th class="employee-header">logs</th>
                               </tr>
                         </thead>
                         <tbody>
-                        <?php
-       $stmt = $user->members();
-       while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+ <?php
+ $stmt = $user->members();
+while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     echo "<tr>";
     echo "<td class='employee-cell'>" . htmlspecialchars($row['id']) . "</td>";
     echo "<td class='employee-cell'>" . htmlspecialchars($row['first_name']) . "</td>";
     echo "<td class='employee-cell'>" . htmlspecialchars($row['last_name']) . "</td>";
     echo "<td class='employee-cell'>" . htmlspecialchars($row['employee_id']) . "</td>";
     echo "<td class='icons employee-cell'>";
-    echo "<span class='edit-icon'><a href='../models/edit.php?id=" . htmlspecialchars($row['id']) . "\"'>&#9998;</a></span>";
-    echo "<span class='delete-icon'><a href='../models/delete.php?id=" . htmlspecialchars($row['id']) . "\"'>&#128465;</a></span>";
+    echo "<span class='edit-icon'><a href='../models/edit.php?id=" . htmlspecialchars($row['id']) . "'>✏️</a></span>";
+    echo "<span class='delete-icon'><a href='../models/delete.php?id=" . htmlspecialchars($row['id']) . "'>🗑️</a></span>";
     echo "</td>";
+   echo "<td class='employee-cell'>";
+// Get login logs for this user
+$logs = $user->getUserLogs($row['id']);
+if ($logs) {
+    $log = $logs[0]; // Get most recent log
+    echo "Last login: " . htmlspecialchars($log['login_time']) . "<br>";
+} else {
+    echo "No login history";
+}
+echo "</td>";
     echo "</tr>";
 }
 ?>                            
                         </tbody>
                   </table>
             </div>
-      </div>
+<div class="add-member">
+    <h2><span>👥</span> ADD NEW MEMBER</h2>
+    <form action="home.php" method="POST">
+        <input type="text" name="member_name" placeholder="Full Name" required>
+        <input type="email" name="member_email" placeholder="Email" required>
+        <input type="password" name="member_password" placeholder="Password" required>
+        <input type="password" name="confirm_password" placeholder="Confirm Password" required>
+        <button class="btns round" type="submit" name="add_member">Add Member</button>
+    </form>
+    <?php
+   if (isset($_SESSION['success'])): ?>
+        <div class="alert alert-success">
+            <?php 
+                echo $_SESSION['success'];
+                unset($_SESSION['success']);
+            ?>
+        </div>
+    <?php endif; ?>
+    
+    <?php if (isset($_SESSION['error'])): ?>
+        <div class="alert alert-error">
+            <?php 
+                echo $_SESSION['error'];
+                unset($_SESSION['error']);
+            ?>
+        </div>
+    <?php endif; ?>
+</div>
+</div>
 
       <!-- CATEGORIES -->
       <div class="section" id="categories">
